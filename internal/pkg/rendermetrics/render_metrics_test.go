@@ -700,6 +700,39 @@ func TestRenderOmitsEmptyMetricFamilies(t *testing.T) {
 	assert.Empty(t, w.String())
 }
 
+// TestRenderDropsOutOfRangeGPUUtilization verifies corrupt DCGM utilization samples are omitted.
+func TestRenderDropsOutOfRangeGPUUtilization(t *testing.T) {
+	counter := counters.Counter{FieldName: gpuUtilizationMetric, PromType: "gauge"}
+	metrics := collector.MetricsByCounter{counter: {
+		{UUID: "UUID", GPU: "0", Value: "100.01"},
+		{UUID: "UUID", GPU: "1", Value: "100.02"},
+		{UUID: "UUID", GPU: "2", Value: "808334905"},
+	}}
+
+	var w bytes.Buffer
+	err := RenderGroup(&w, dcgm.FE_GPU, metrics)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, strings.Count(w.String(), gpuUtilizationMetric+"{"))
+	assert.Contains(t, w.String(), `gpu="0"`)
+	assert.NotContains(t, w.String(), `gpu="1"`)
+	assert.NotContains(t, w.String(), `gpu="2"`)
+}
+
+// TestRenderOmitsGPUUtilizationFamilyWhenAllSamplesOutOfRange verifies no empty family is emitted.
+func TestRenderOmitsGPUUtilizationFamilyWhenAllSamplesOutOfRange(t *testing.T) {
+	counter := counters.Counter{FieldName: gpuUtilizationMetric, PromType: "gauge"}
+	metrics := collector.MetricsByCounter{counter: {
+		{UUID: "UUID", GPU: "0", Value: "101"},
+	}}
+
+	var w bytes.Buffer
+	err := RenderGroup(&w, dcgm.FE_GPU, metrics)
+	require.NoError(t, err)
+
+	assert.Empty(t, w.String())
+}
+
 // TestLabelSignatureDoesNotCollideOnEmbeddedSeparators verifies length-prefix signatures.
 func TestLabelSignatureDoesNotCollideOnEmbeddedSeparators(t *testing.T) {
 	first := []*dto.LabelPair{

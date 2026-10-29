@@ -46,6 +46,14 @@ import (
 * ```
  */
 
+const (
+	// gpuUtilizationMetric occasionally spikes above the valid 0-100 range
+	// because of a DCGM defect. Drop those samples instead of exporting corrupt
+	// data; a small margin tolerates floating-point rounding at the limit.
+	gpuUtilizationMetric   = "DCGM_FI_DEV_GPU_UTIL"
+	maxValidGPUUtilization = 100.01
+)
+
 // metricFamilyBuilder keeps one Prometheus family plus the sample signatures already added to it.
 type metricFamilyBuilder struct {
 	family     *dto.MetricFamily
@@ -183,6 +191,14 @@ func addCounterMetrics(
 		return fmt.Errorf("invalid Prometheus metric name %q", counter.FieldName)
 	}
 
+	metrics, err = dropOutOfRangeGPUUtilization(counter, metrics)
+	if err != nil {
+		return err
+	}
+	if len(metrics) == 0 {
+		return nil
+	}
+
 	builder, err := metricFamilyBuilderFor(builders, counter, metricType, len(metrics))
 	if err != nil {
 		return err
@@ -205,6 +221,32 @@ func addCounterMetrics(
 	}
 
 	return nil
+}
+
+// dropOutOfRangeGPUUtilization removes GPU utilization samples above the valid
+// percentage range. Other counters, including their invalid values, are
+// returned unchanged so validation still applies to them.
+func dropOutOfRangeGPUUtilization(
+	counter counters.Counter,
+	metrics []collector.Metric,
+) ([]collector.Metric, error) {
+	if counter.FieldName != gpuUtilizationMetric {
+		return metrics, nil
+	}
+
+	filtered := make([]collector.Metric, 0, len(metrics))
+	for _, metric := range metrics {
+		value, err := parseMetricValue(counter, metric.Value)
+		if err != nil {
+			return nil, err
+		}
+		if value > maxValidGPUUtilization {
+			continue
+		}
+		filtered = append(filtered, metric)
+	}
+
+	return filtered, nil
 }
 
 // metricFamilyBuilderFor returns the existing family builder or creates one with matching metadata.
