@@ -19,6 +19,7 @@ package rendermetrics
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"slices"
 	"sort"
@@ -241,6 +242,12 @@ func dropOutOfRangeGPUUtilization(
 			return nil, err
 		}
 		if value > maxValidGPUUtilization {
+			slog.Warn("Dropping out-of-range GPU utilization sample",
+				"metric", counter.FieldName,
+				"value", metric.Value,
+				"gpu", metric.GPU,
+				"uuid", metric.UUID,
+			)
 			continue
 		}
 		filtered = append(filtered, metric)

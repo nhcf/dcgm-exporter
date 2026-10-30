@@ -19,6 +19,7 @@ package rendermetrics
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -717,6 +718,30 @@ func TestRenderDropsOutOfRangeGPUUtilization(t *testing.T) {
 	assert.Contains(t, w.String(), `gpu="0"`)
 	assert.NotContains(t, w.String(), `gpu="1"`)
 	assert.NotContains(t, w.String(), `gpu="2"`)
+}
+
+// TestRenderLogsOutOfRangeGPUUtilization verifies dropped samples produce a warning.
+func TestRenderLogsOutOfRangeGPUUtilization(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	counter := counters.Counter{FieldName: gpuUtilizationMetric, PromType: "gauge"}
+	metrics := collector.MetricsByCounter{counter: {
+		{UUID: "GPU-uuid", GPU: "2", Value: "808334905"},
+	}}
+
+	var w bytes.Buffer
+	err := RenderGroup(&w, dcgm.FE_GPU, metrics)
+	require.NoError(t, err)
+
+	logOutput := logs.String()
+	assert.Contains(t, logOutput, "level=WARN")
+	assert.Contains(t, logOutput, "Dropping out-of-range GPU utilization sample")
+	assert.Contains(t, logOutput, "value=808334905")
+	assert.Contains(t, logOutput, "gpu=2")
+	assert.Contains(t, logOutput, "uuid=GPU-uuid")
 }
 
 // TestRenderOmitsGPUUtilizationFamilyWhenAllSamplesOutOfRange verifies no empty family is emitted.
