@@ -42,6 +42,7 @@ func TestShippedMetricSourcesLoadThroughCounterExtraction(t *testing.T) {
 	sources := []string{
 		"etc/default-counters.csv",
 		"etc/dcp-metrics-included.csv",
+		"etc/wxs-counters.csv",
 		"etc/1.x-compatibility-metrics.csv",
 		"tests/host/testdata/default-counters.csv",
 		"tests/host/testdata/dcp-counters.csv",

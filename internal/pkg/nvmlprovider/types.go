@@ -32,5 +32,7 @@ type NVML interface {
 	// GetAllMIGDevicesProcessMemory returns per-process memory usage for all MIG instances on a GPU.
 	// Returns map[gpuInstanceID (MIG instance)]map[PID]memoryBytes.
 	GetAllMIGDevicesProcessMemory(parentGPUUUID string) (map[uint]map[uint32]uint64, error)
+	// GetDeviceProcessCounts queries physical GPU process lists by UUID. Errors never become zero samples.
+	GetDeviceProcessCounts(gpuUUID string) (compute int, graphics int, err error)
 	Cleanup()
 }

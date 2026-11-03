@@ -531,7 +531,9 @@ func runDCGMExporter(lifecycleCtx context.Context, c *cli.Context, reloadRequest
 	}
 
 	// Initialize DCGM Provider Instance (once)
+	finishDCGM := startStartupPhase(lifecycleCtx, "dcgm.initialize", 0)
 	initializeDCGMProviderFunc(config)
+	finishDCGM()
 
 	defer func() { dcgmprovider.Client().Cleanup() }()
 	slog.Info("DCGM successfully initialized!")
@@ -565,7 +567,9 @@ func runDCGMExporter(lifecycleCtx context.Context, c *cli.Context, reloadRequest
 	}
 
 	// Initialize NVML as the preferred MIG profile-name source in every deployment mode.
+	finishNVML := startStartupPhase(ctx, "nvml.initialize", 0)
 	err = initializeNVMLProviderFunc()
+	finishNVML()
 	if err != nil {
 		// Keep validated Kubernetes startup strict; other modes fall back to DCGM.
 		if config.Kubernetes && !config.DisableStartupValidate {
@@ -727,13 +731,19 @@ func queueReload(reloadRequests chan<- struct{}) {
 // Note: Does NOT query DCP metrics - caller must do this before calling.
 func buildRegistry(ctx context.Context, _ *cli.Context, config *appconfig.Config) (*registry.Registry, devicewatchlistmanager.Manager, error) {
 	slog.Info("Building registry for current GPU topology")
+	defer startStartupPhase(ctx, "registry.build", 0)()
 
+	finishCounters := startStartupPhase(ctx, "metrics.load_config", 0)
 	cs, err := getCountersFunc(ctx, config)
+	finishCounters()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get counters: %w", err)
 	}
 
+	slog.Info("Metric configuration loaded", "dcgm_counters", len(cs.DCGMCounters), "exporter_counters", len(cs.ExporterCounters))
+	finishWatchList := startStartupPhase(ctx, "devices.initialize_watch_lists", 0)
 	deviceWatchListManager, err := startWatchListManagerFunc(cs, config)
+	finishWatchList()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -750,7 +760,9 @@ func buildRegistry(ctx context.Context, _ *cli.Context, config *appconfig.Config
 	cf := initCollectorFactoryFunc(cs, deviceWatchListManager, hostName, config)
 
 	cRegistry := registry.NewRegistry()
+	finishCollectors := startStartupPhase(ctx, "collectors.initialize", 0)
 	count := populateRegistry(cf, cRegistry)
+	finishCollectors()
 
 	slog.Info("Registry built successfully", slog.Int("collector_count", count))
 
@@ -1446,7 +1458,7 @@ func getCounters(ctx context.Context, config *appconfig.Config) (*counters.Count
 // — overwriting any prior enabled snapshot — without depending on LIFO
 // declaration order.
 func (r *reloadCoordinator) queryDCPMetrics(cfg *appconfig.Config, reloadID uint64) {
-	slog.Debug("Querying DCGM profiling metric groups", slog.Uint64("reload_id", reloadID))
+	defer startStartupPhase(context.Background(), "dcgm.profiling.capabilities", reloadID)()
 
 	defer func() {
 		if p := recover(); p != nil {
@@ -1459,7 +1471,9 @@ func (r *reloadCoordinator) queryDCPMetrics(cfg *appconfig.Config, reloadID uint
 		r.dcp = newDCPCapabilities(cfg)
 	}()
 
+	finishGroups := startStartupPhase(context.Background(), "dcgm.profiling.metric_groups", reloadID)
 	groups, err := dcgmprovider.Client().GetSupportedMetricGroups(0)
+	finishGroups()
 	if err != nil {
 		cfg.CollectDCP = false
 		cfg.MetricGroups = nil
@@ -1468,8 +1482,14 @@ func (r *reloadCoordinator) queryDCPMetrics(cfg *appconfig.Config, reloadID uint
 	}
 
 	gpuModel := "unknown"
-	if gpuCount, err := dcgmprovider.Client().GetAllDeviceCount(); err == nil && gpuCount > 0 {
-		if gpuInfo, err := dcgmprovider.Client().GetDeviceInfo(0); err == nil {
+	finishCount := startStartupPhase(context.Background(), "dcgm.profiling.device_count", reloadID)
+	gpuCount, countErr := dcgmprovider.Client().GetAllDeviceCount()
+	finishCount()
+	if countErr == nil && gpuCount > 0 {
+		finishInfo := startStartupPhase(context.Background(), "dcgm.profiling.device_info", reloadID)
+		gpuInfo, infoErr := dcgmprovider.Client().GetDeviceInfo(0)
+		finishInfo()
+		if infoErr == nil {
 			gpuModel = gpuInfo.Identifiers.Model
 		}
 	}

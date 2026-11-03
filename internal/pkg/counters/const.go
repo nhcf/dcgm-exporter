@@ -20,6 +20,13 @@ const (
 	cpuFieldsStart = 1100
 	dcpFieldsStart = 1000
 
+	NVLinkInactiveStatus        = "DCGM_FI_DEV_NVLINK_INACTIVE_STATUS"
+	GPUComputeRunningProcesses  = "DCGM_FI_DEV_COMP_RUNNING_PROC"
+	GPUGraphicsRunningProcesses = "DCGM_FI_DEV_GRAPH_RUNNING_PROC"
+	GPUTotalCount               = "DCGM_FI_DEV_TOTAL_COUNT"
+	GPUUsedCount                = "DCGM_FI_DEV_USED_COUNT"
+	GPUErrorCount               = "DCGM_FI_DEV_ERROR_COUNT"
+
 	DCGMExpClockEventsCount = "DCGM_EXP_CLOCK_EVENTS_COUNT"
 	DCGMExpXIDErrorsCount   = "DCGM_EXP_XID_ERRORS_COUNT"
 	DCGMExpGPUHealthStatus  = "DCGM_EXP_GPU_HEALTH_STATUS"

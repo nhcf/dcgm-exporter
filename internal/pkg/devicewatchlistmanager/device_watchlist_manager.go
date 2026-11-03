@@ -183,6 +183,17 @@ func (d *WatchList) Watch() ([]func(), error) {
 	return d.watchComputeInstanceFields()
 }
 
+// WatchParentGPULabels installs label watches on parents omitted by a MIG-only selection.
+// The caller owns the returned cleanups, independently of the selected-entity watches.
+func (d *WatchList) WatchParentGPULabels() ([]func(), error) {
+	groups := d.fieldWatchGroupsForFields(d.labelDeviceFields)
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	_, _, cleanups, err := d.watcher.WatchDeviceFieldGroupsForParentGPUs(groups, d.deviceInfo)
+	return cleanups, err
+}
+
 // watchComputeInstanceFields keeps fields and entities at matching scopes so
 // DCGM does not create an unnecessary entity-by-field Cartesian product.
 func (d *WatchList) watchComputeInstanceFields() ([]func(), error) {

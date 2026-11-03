@@ -143,3 +143,53 @@ Docker images and packages are user-visible release artifacts.
   should not mask verification failures with `|| true`.
 - Version-derived files are updated through `hack/versions.env` plus
   `make sync-versions`, then checked with `make validate-versions`.
+
+
+### Optional wxs compatibility metrics
+
+The optional `etc/wxs-counters.csv` profile retains the six metric names from the
+wxs fork and uses current DCGM field names and metadata. Select it with
+`-f /etc/dcgm-exporter/wxs-counters.csv`, or add the commented compatibility rows
+from `etc/default-counters.csv` to your own complete metric source. These metrics
+are exporter-owned gauges, not native DCGM fields; other metric sources do not
+enable them implicitly. The profile also enables the old scalar clock, temperature,
+ECC, retired-page, profiling and static-label selections. Blob-valued supported-clock
+and process-accounting fields from the old `rows_counter.csv` are excluded because
+they cannot be rendered as scalar samples. Fan speed and pending retirement use
+`gauge`; current NVLink bandwidth metadata is retained. Image, deployment and CI
+configuration remain unchanged.
+
+| Metric | Scope and meaning |
+| --- | --- |
+| `DCGM_FI_DEV_NVLINK_INACTIVE_STATUS` | Per physical GPU: number of NVLink lanes reported `LS_DOWN`. GPUs absent from the link-status response have no sample. |
+| `DCGM_FI_DEV_COMP_RUNNING_PROC` | Per physical GPU: number of compute processes reported by NVML. |
+| `DCGM_FI_DEV_GRAPH_RUNNING_PROC` | Per physical GPU: number of graphics processes reported by NVML. |
+| `DCGM_FI_DEV_TOTAL_COUNT` | Node: number of selected physical GPUs. |
+| `DCGM_FI_DEV_USED_COUNT` | Node: number of selected physical GPUs with compute processes. Graphics-only activity does not count as used. |
+| `DCGM_FI_DEV_ERROR_COUNT` | Node: number of physical GPUs whose NVML process query failed during this collection. This is not a hardware health diagnosis or a cumulative error count. |
+
+Physical GPUs are deduplicated, including parents of selected MIG instances.
+Per-GPU samples use the current GPU labels and `hostname`; they do not repeat
+parent process counts under MIG labels. Node counts carry only `hostname` when
+hostname output is enabled. Existing queries from the fork using `Hostname`
+need to use `hostname`. NVLink inactive counts use `gauge` because links can
+recover; do not use `rate()` as though they were cumulative counters.
+
+Failed or unsupported process queries omit that GPU's process samples and count
+the GPU once in `DCGM_FI_DEV_ERROR_COUNT`. If any GPU query fails,
+`DCGM_FI_DEV_USED_COUNT` is omitted to avoid presenting a partial sum as the
+node's utilization. Process metrics and their used/error aggregates are omitted
+in remote hostengine and fake-GPU modes because NVML queries local hardware.
+NVLink query failures omit only NVLink samples and are logged; they do not fail
+the entire scrape. These gauges hold no cumulative state across reloads.
+
+NVML uses the default dynamic loader search (`libnvidia-ml.so.1`) unless configured.
+Set `DCGM_EXPORTER_NVML_LIBRARY_PATH` to an explicit library path to override it.
+For compatibility, `NVIDIA_LIB_SERACH_DIR` (the original spelling) accepts a JSON
+array such as `["/usr/lib/x86_64-linux-gnu", "/usr/local/nvidia/lib64"]`; it searches
+directories in order, recursively. The explicit path takes precedence. Invalid
+JSON, empty directory lists and missing libraries produce initialization errors,
+subject to the existing startup NVML failure policy. Library selection runs
+before NVML initialization and after lifecycle resets; collectors share the
+application's NVML lifecycle. `NODE_NAME` remains optional with the current
+hostname fallback behavior.

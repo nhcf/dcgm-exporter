@@ -382,6 +382,15 @@ func metricLabels(
 ) ([]*dto.LabelPair, error) {
 	builder := newLabelPairs()
 
+	// Inventory aggregates belong to the node and must not carry empty GPU labels.
+	if counters.IsGPUInventoryAggregate(metric.Counter.FieldName) {
+		if metric.Hostname != "" {
+			if err := builder.add("hostname", metric.Hostname); err != nil {
+				return nil, err
+			}
+		}
+		return builder.labels, nil
+	}
 	// Preserve the historical label names for each DCGM entity group.
 	switch group {
 	case dcgm.FE_GPU:

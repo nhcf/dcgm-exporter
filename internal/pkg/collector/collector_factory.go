@@ -172,6 +172,26 @@ func (cf *collectorFactory) NewCollectors() []EntityCollectorTuple {
 		})
 	}
 
+	inventoryCounters := counters.CounterList{}
+	for _, counter := range cf.counterSet.ExporterCounters {
+		if counters.IsGPUInventoryMetric(counter.FieldName) {
+			inventoryCounters = append(inventoryCounters, counter)
+		}
+	}
+	if len(inventoryCounters) > 0 {
+		watchList, exists := cf.deviceWatchListManager.EntityWatchList(dcgm.FE_GPU)
+		if exists {
+			inventory, err := newGPUInventoryCollector(inventoryCounters, cf.counterSet.ExporterCounters.LabelCounters(), cf.hostname, cf.config, watchList)
+			if err != nil {
+				slog.Error("Cannot initialize physical GPU metrics collector", "error", err)
+				if !cf.config.DisableStartupValidate {
+					os.Exit(1)
+				}
+			} else {
+				entityCollectorTuples = append(entityCollectorTuples, EntityCollectorTuple{entity: dcgm.FE_GPU, collector: inventory})
+			}
+		}
+	}
 	return entityCollectorTuples
 }
 

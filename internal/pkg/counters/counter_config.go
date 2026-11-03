@@ -158,6 +158,16 @@ func ExtractCounters(records [][]string, c *appconfig.Config) (*CounterSet, erro
 			)
 		}
 
+		if IsGPUInventoryMetric(record[0]) {
+			if record[1] != "gauge" {
+				return nil, fmt.Errorf("physical GPU metric %q requires type gauge", record[0])
+			}
+			res.ExporterCounters = append(res.ExporterCounters, Counter{
+				FieldID: dcgm.Short(DCGMFields[record[0]]), FieldName: record[0], PromType: record[1], Help: record[2],
+			})
+			continue
+		}
+
 		fieldID, ok := dcgm.GetFieldID(record[0])
 		isLegacyField := dcgm.IsLegacyField(record[0])
 

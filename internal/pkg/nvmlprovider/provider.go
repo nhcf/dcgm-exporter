@@ -127,11 +127,7 @@ func newNVMLProvider() (NVML, error) {
 		return Client(), nil
 	}
 
-	slog.Info("Attempting to initialize NVML library.")
-	ret := nvml.Init()
-	if ret != nvml.SUCCESS {
-		err := errors.New(nvml.ErrorString(ret))
-		slog.Error(fmt.Sprintf("Cannot init NVML library; err: %v", err))
+	if err := initializeLibrary(); err != nil {
 		return nvmlProvider{initialized: false}, err
 	}
 
